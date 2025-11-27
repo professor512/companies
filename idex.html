@@ -1,0 +1,590 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Placement Journey — CSV-only Tracker</title>
+<style>
+  :root{
+    --bg:#f6f7fb;
+    --card:#ffffff;
+    --muted:#6b7280;
+    --accent:#4f46e5;
+    --success:#10b981;
+    --danger:#ef4444;
+    --glass: rgba(255,255,255,0.7);
+  }
+  *{box-sizing:border-box;font-family:Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;}
+  body{ margin:0; min-height:100vh; background:linear-gradient(180deg,#eef2ff 0%,var(--bg) 60%); display:flex; justify-content:center; padding:36px 16px; color:#0f172a; }
+  .container{ width:1300px; max-width:100%; } /* user requested 1300px */
+
+  header{ display:flex; align-items:center; justify-content:space-between; margin-bottom:18px; gap:12px; flex-wrap:wrap; }
+  header h1{ margin:0; font-size:20px; letter-spacing:-0.2px; }
+
+  .controls{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  button.btn{ background:var(--accent); color:white; border:0; padding:8px 12px; border-radius:8px; cursor:pointer; font-weight:600; box-shadow:0 6px 18px rgba(79,70,229,0.12); }
+  button.secondary{ background:transparent; color:var(--accent); border:1px solid rgba(79,70,229,0.12); font-weight:600; padding:8px 12px; border-radius:8px; cursor:pointer; }
+  input[type="search"]{ padding:8px 12px; border-radius:8px; border:1px solid #e6e9ef; min-width:320px; }
+
+  .home-card{ background:var(--card); border-radius:12px; padding:20px; display:flex; align-items:center; gap:18px; box-shadow:0 6px 18px rgba(2,6,23,0.06); margin-bottom:18px; cursor:pointer; transition:transform .18s ease, box-shadow .18s ease; }
+  .home-card:hover{ transform:translateY(-6px); box-shadow:0 12px 30px rgba(2,6,23,0.08); }
+  .card-icon{ width:56px;height:56px;border-radius:10px;background:linear-gradient(135deg,var(--accent),#7c3aed);display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:20px; }
+  .card-body h2{ margin:0 0 6px 0; font-size:16px;}
+  .card-body p{ margin:0; color:var(--muted); font-size:13px; }
+
+  .form-panel{ background:var(--card); border-radius:12px; padding:16px; margin-bottom:16px; box-shadow:0 6px 18px rgba(2,6,23,0.04); }
+  .form-row{ display:flex; gap:10px; margin-bottom:10px; }
+  .form-row .col{ flex:1; display:flex; flex-direction:column; }
+  label{ font-size:12px; color:var(--muted); margin-bottom:6px; }
+  input[type="text"], input[type="email"], input[type="tel"], input[type="url"], textarea, select{
+    padding:10px 12px; border-radius:8px; border:1px solid #e6e9ef; outline:none; font-size:14px; background:transparent;
+  }
+  textarea{ min-height:64px; resize:vertical; }
+
+  .toolbar{ display:flex; gap:12px; align-items:center; margin-bottom:12px; flex-wrap:wrap; }
+  .filter-pill{ padding:8px 12px; border-radius:999px; border:1px solid #e6e9ef; background:transparent; cursor:pointer; font-weight:600; }
+  .active-filter{ background:var(--accent); color:white; border-color:var(--accent); }
+
+  .table-wrap{ overflow-x:auto; background:transparent; border-radius:8px; }
+  table{ width:100%; border-collapse:collapse; background:transparent; min-width:1000px; }
+  thead th{ text-align:left; padding:12px; font-size:13px; color:var(--muted); border-bottom:1px solid #eef1f7; position:sticky; top:0; background:var(--card); z-index:2; }
+  tbody td{ padding:10px; vertical-align:middle; border-bottom:1px dashed #f0f2f6; font-size:14px; }
+  .status-btn{ padding:6px 10px; border-radius:999px; border:0; cursor:pointer; font-weight:600; }
+  .status-not{ background:#f3f4f6; color:#111827; }
+  .status-applied{ background:var(--success); color:white; box-shadow:0 6px 10px rgba(16,185,129,0.12); }
+  .note-input{ width:100%; padding:8px 10px; border-radius:8px; border:1px solid #e6e9ef; font-size:13px; }
+  .action-btn{ background:transparent; border:1px solid #e6e9ef; padding:6px 8px; border-radius:8px; cursor:pointer; }
+
+  .small{ font-size:12px; color:var(--muted); margin-top:8px; }
+
+  /* responsive */
+  @media (max-width:1200px){
+    .container{ width:100%; padding:0 12px; }
+    input[type="search"]{ min-width:180px; }
+  }
+  a.linkish{ color:var(--accent); text-decoration:none; font-weight:600; }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>Placement Journey — CSV-only Tracker</h1>
+    <div class="controls" style="margin-left:auto;">
+      <input id="globalSearch" type="search" placeholder="Search companies, location, email, website, note..." aria-label="Search" />
+      <select id="locationFilter" title="Filter by location" style="padding:8px 10px;border-radius:8px;border:1px solid #e6e9ef;">
+        <option value="__all">All locations</option>
+      </select>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button id="filterAll" class="filter-pill active-filter">All</button>
+        <button id="filterApplied" class="filter-pill">Applied</button>
+        <button id="filterNot" class="filter-pill">Not applied</button>
+      </div>
+
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button id="chooseFile" class="btn secondary" title="Choose a CSV file to use as storage (recommended)">Choose CSV</button>
+        <button id="downloadCsv" class="btn">Download CSV</button>
+        <label>
+          <input id="uploadCsv" type="file" accept=".csv" style="display:none" />
+          <button id="uploadBtn" class="btn secondary">Upload CSV</button>
+        </label>
+      </div>
+    </div>
+  </header>
+
+  <div id="homeCard" class="home-card" title="Click to add a new company">
+    <div class="card-icon">IC</div>
+    <div class="card-body">
+      <h2>Internship Companies and applications</h2>
+      <p>Click to add a new company. Data is stored only in CSV. Choose a CSV file to enable auto-save (Chrome/Edge).</p>
+    </div>
+  </div>
+
+  <div id="formPanel" class="form-panel" style="display:none;">
+    <form id="companyForm">
+      <div class="form-row">
+        <div class="col"><label for="name">Company name *</label><input id="name" name="name" type="text" required placeholder="Acme Labs" /></div>
+        <div class="col"><label for="location">Location</label><input id="location" name="location" type="text" placeholder="Pune / Remote / City" /></div>
+      </div>
+
+      <div class="form-row">
+        <div class="col"><label for="email">Email</label><input id="email" name="email" type="email" placeholder="hr@company.com" /></div>
+        <div class="col"><label for="phone">Phone</label><input id="phone" name="phone" type="tel" placeholder="+91 99xxxxxxx" /></div>
+      </div>
+
+      <div class="form-row">
+        <div class="col"><label for="website">Website</label><input id="website" name="website" type="url" placeholder="https://company.com" /></div>
+        <div class="col"><label for="linkedin">LinkedIn</label><input id="linkedin" name="linkedin" type="url" placeholder="https://www.linkedin.com/company/..." /></div>
+      </div>
+
+      <div class="form-row">
+        <div class="col"><label for="other">Other social / contact</label><input id="other" name="other" type="text" placeholder="Twitter / Contact person / Notes" /></div>
+        <div class="col"><label for="status">Initial status</label><select id="status" name="status"><option value="not applied" selected>Not applied</option><option value="applied">Applied</option></select></div>
+      </div>
+
+      <div class="form-row">
+        <div class="col"><label for="note">Short note</label><textarea id="note" name="note" placeholder="Any short note (e.g. applied on 2025-01-10)"></textarea></div>
+        <div class="col"></div>
+      </div>
+
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button type="submit" class="btn">Add company</button>
+        <button type="button" id="cancelForm" class="btn secondary">Cancel</button>
+        <div class="small">* Required. Choose CSV to enable autosave. Otherwise download after changes.</div>
+      </div>
+    </form>
+  </div>
+
+  <div id="listPanel" class="form-panel" style="display:none;">
+    <div class="table-wrap">
+      <table id="companiesTable" aria-live="polite">
+        <thead>
+          <tr>
+            <th style="width:220px">Company</th>
+            <th style="width:120px">Location</th>
+            <th style="width:180px">Contact</th>
+            <th style="width:220px">Web / Social</th>
+            <th style="width:120px">Status</th>
+            <th style="min-width:200px">Note</th>
+            <th style="width:140px">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+    <div class="small" style="margin-top:8px">Tip: use search, filters, and location dropdown. Edit note inline. Use "Choose CSV" to enable auto-save (Chrome/Edge).</div>
+  </div>
+</div>
+
+<script>
+/*
+  CSV-only Placement Tracker (with Search + Filters + Location dropdown)
+  - No localStorage
+  - CSV file is the single source of truth
+  - Additions/edits/deletes autosave to selected CSV file (File System Access API in Chrome/Edge)
+  - Fallback: Download CSV triggers file download
+*/
+
+let companies = []; // in-memory
+let fileHandle = null;
+
+const CSV_HEADERS = ['name','location','email','phone','website','linkedin','other','status','note','addedAt'];
+
+// DOM refs
+const homeCard = document.getElementById('homeCard');
+const formPanel = document.getElementById('formPanel');
+const listPanel = document.getElementById('listPanel');
+const companyForm = document.getElementById('companyForm');
+const tableBody = document.getElementById('tableBody');
+const downloadCsvBtn = document.getElementById('downloadCsv');
+const uploadCsvInput = document.getElementById('uploadCsv');
+const uploadBtn = document.getElementById('uploadBtn');
+const chooseFileBtn = document.getElementById('chooseFile');
+const cancelFormBtn = document.getElementById('cancelForm');
+
+const searchInput = document.getElementById('globalSearch');
+const filterAllBtn = document.getElementById('filterAll');
+const filterAppliedBtn = document.getElementById('filterApplied');
+const filterNotBtn = document.getElementById('filterNot');
+const locationFilter = document.getElementById('locationFilter');
+
+let activeStatusFilter = '__all'; // '__all' | 'applied' | 'not applied'
+
+// --- CSV helpers ---
+function escapeCsvCell(value){
+  if(value === null || value === undefined) value = '';
+  value = String(value);
+  if(value.includes('"')) value = value.replace(/"/g, '""');
+  if(value.includes(',') || value.includes('\n') || value.includes('"')) {
+    return `"${value}"`;
+  }
+  return value;
+}
+
+function toCSV(arr){
+  const rows = [CSV_HEADERS.join(',')];
+  for(const c of arr){
+    const r = CSV_HEADERS.map(h => escapeCsvCell(c[h] ?? ''));
+    rows.push(r.join(','));
+  }
+  return rows.join('\n');
+}
+
+// simple CSV parser that handles quotes & line breaks
+function parseCSV(text){
+  const lines = [];
+  let cur = '';
+  let inQuotes = false;
+  for(let i=0;i<text.length;i++){
+    const ch = text[i];
+    if(ch === '"' ){
+      if(inQuotes && i+1 < text.length && text[i+1] === '"'){
+        cur += '"'; i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if(ch === '\n' && !inQuotes){
+      lines.push(cur);
+      cur = '';
+    } else {
+      cur += ch;
+    }
+  }
+  if(cur !== '') lines.push(cur);
+
+  const parsed = lines.map(line => {
+    const res = [];
+    let field = '';
+    let quoted = false;
+    for(let i=0;i<line.length;i++){
+      const ch = line[i];
+      if(ch === '"' ){
+        if(quoted && i+1<line.length && line[i+1]==='"'){ field += '"'; i++; }
+        else quoted = !quoted;
+      } else if(ch === ',' && !quoted){
+        res.push(field);
+        field = '';
+      } else {
+        field += ch;
+      }
+    }
+    res.push(field);
+    return res;
+  });
+
+  if(parsed.length === 0) return [];
+  const header = parsed[0].map(h => h.trim());
+  const out = [];
+  for(let i=1;i<parsed.length;i++){
+    const row = parsed[i];
+    if(row.length === 1 && row[0].trim() === '') continue;
+    const obj = {};
+    for(let j=0;j<header.length;j++){
+      obj[header[j]] = row[j] ?? '';
+    }
+    out.push(obj);
+  }
+  return out;
+}
+
+function normalizeParsedRows(rows){
+  const mapped = [];
+  rows.forEach(row => {
+    const item = {
+      name: row.name ?? row.Company ?? row.company ?? '',
+      location: row.location ?? row.Location ?? '',
+      email: row.email ?? row.Email ?? '',
+      phone: row.phone ?? row.Phone ?? '',
+      website: row.website ?? row.Website ?? '',
+      linkedin: row.linkedin ?? row.LinkedIn ?? row['LinkedIn'] ?? '',
+      other: row.other ?? row.Other ?? '',
+      status: ((row.status ?? row.Status ?? 'not applied') + '').toLowerCase(),
+      note: row.note ?? row.Note ?? '',
+      addedAt: row.addedAt ?? row.addedAt ?? new Date().toISOString()
+    };
+    item.status = item.status === 'applied' ? 'applied' : 'not applied';
+    if(item.name) mapped.push(item);
+  });
+  return mapped;
+}
+
+// persist CSV: write to selected file if available else download
+async function persistCSV(){
+  const csv = toCSV(companies);
+  if(window.showSaveFilePicker && fileHandle){
+    try{
+      const writable = await fileHandle.createWritable();
+      await writable.write(csv);
+      await writable.close();
+      return true;
+    }catch(err){
+      console.error('Write failed', err);
+      alert('Auto-save failed: ' + (err.message || err));
+      return false;
+    }
+  } else {
+    // fallback: download
+    const blob = new Blob([csv], {type: 'text/csv'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'placements_companies.csv';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    return true;
+  }
+}
+
+// --- rendering & filtering ---
+function getUniqueLocations(arr){
+  const s = new Set();
+  arr.forEach(c => {
+    const v = (c.location || '').trim();
+    if(v) s.add(v);
+  });
+  return Array.from(s).sort((a,b)=>a.localeCompare(b));
+}
+
+function populateLocationFilter(){
+  // keep "__all" as first option
+  const locs = getUniqueLocations(companies);
+  // clear all but first
+  while(locationFilter.options.length > 1) locationFilter.remove(1);
+  locs.forEach(loc => {
+    const opt = document.createElement('option');
+    opt.value = loc;
+    opt.textContent = loc;
+    locationFilter.appendChild(opt);
+  });
+}
+
+function matchesSearch(item, query){
+  if(!query) return true;
+  query = query.toLowerCase();
+  const fields = ['name','location','email','website','linkedin','other','note','phone'];
+  for(const f of fields){
+    if((item[f]||'').toLowerCase().includes(query)) return true;
+  }
+  return false;
+}
+
+function renderTable(){
+  // apply filters & search
+  const q = (searchInput.value || '').trim();
+  const loc = locationFilter.value;
+  let rows = companies.filter(c => {
+    if(activeStatusFilter !== '__all' && c.status !== activeStatusFilter) return false;
+    if(loc && loc !== '__all' && (c.location || '') !== loc) return false;
+    if(!matchesSearch(c, q)) return false;
+    return true;
+  });
+
+  if(rows.length === 0){
+    listPanel.style.display = 'none';
+    tableBody.innerHTML = '';
+    return;
+  }
+  listPanel.style.display = 'block';
+  tableBody.innerHTML = '';
+  rows.forEach((c, idxFiltered) => {
+    // find original index for delete/edit mapping (since rows is filtered)
+    const origIndex = companies.indexOf(c);
+
+    const tr = document.createElement('tr');
+
+    const tdName = document.createElement('td');
+    const nameWrap = document.createElement('div');
+    const nameEl = document.createElement('div'); nameEl.textContent = c.name || '(no name)'; nameEl.style.fontWeight='700';
+    const added = document.createElement('div'); added.textContent = c.addedAt ? ('added: ' + new Date(c.addedAt).toLocaleDateString()) : ''; added.style.fontSize='12px'; added.style.color='var(--muted)';
+    nameWrap.appendChild(nameEl); nameWrap.appendChild(added);
+    tdName.appendChild(nameWrap);
+
+    const tdLoc = document.createElement('td'); tdLoc.textContent = c.location || '';
+
+    const tdContact = document.createElement('td');
+    const contactParts = [];
+    if(c.email) contactParts.push(c.email);
+    if(c.phone) contactParts.push(c.phone);
+    tdContact.textContent = contactParts.join(' / ');
+
+    const tdWeb = document.createElement('td');
+    const webWrap = document.createElement('div');
+    if(c.website){
+      const a = document.createElement('a'); a.href = c.website.startsWith('http') ? c.website : 'https://' + c.website; a.target='_blank'; a.rel='noopener'; a.className='linkish'; a.textContent = c.website;
+      webWrap.appendChild(a);
+    }
+    if(c.linkedin){
+      const br = document.createElement('div');
+      const li = document.createElement('a'); li.href = c.linkedin.startsWith('http') ? c.linkedin : 'https://' + c.linkedin; li.target='_blank'; li.rel='noopener'; li.className='linkish'; li.textContent = 'LinkedIn';
+      br.appendChild(li);
+      webWrap.appendChild(br);
+    }
+    if(c.other){
+      const ob = document.createElement('div'); ob.style.color='var(--muted)'; ob.style.fontSize='13px'; ob.textContent = c.other; webWrap.appendChild(ob);
+    }
+    tdWeb.appendChild(webWrap);
+
+    const tdStatus = document.createElement('td');
+    const statusBtn = document.createElement('button');
+    statusBtn.className = 'status-btn ' + (c.status === 'applied' ? 'status-applied' : 'status-not');
+    statusBtn.textContent = c.status === 'applied' ? 'Applied' : 'Not applied';
+    statusBtn.addEventListener('click', async () => {
+      c.status = c.status === 'applied' ? 'not applied' : 'applied';
+      await persistCSV();
+      // after toggle update UI & location filter (status change doesn't affect locations but keep consistent)
+      populateLocationFilter();
+      renderTable();
+    });
+    tdStatus.appendChild(statusBtn);
+
+    const tdNote = document.createElement('td');
+    const noteInput = document.createElement('input');
+    noteInput.className='note-input'; noteInput.value = c.note || ''; noteInput.placeholder='Short note';
+    noteInput.addEventListener('change', async () => {
+      c.note = noteInput.value;
+      await persistCSV();
+    });
+    tdNote.appendChild(noteInput);
+
+    const tdActions = document.createElement('td'); tdActions.style.display='flex'; tdActions.style.gap='8px';
+    const delBtn = document.createElement('button'); delBtn.className='action-btn'; delBtn.textContent='Delete';
+    delBtn.addEventListener('click', async () => {
+      if(confirm('Delete "' + (c.name || 'this company') + '"?')){
+        // remove the exact item by reference
+        const i = companies.indexOf(c);
+        if(i >= 0){ companies.splice(i,1); await persistCSV(); populateLocationFilter(); renderTable(); }
+      }
+    });
+    const editBtn = document.createElement('button'); editBtn.className='action-btn'; editBtn.textContent='Edit';
+    editBtn.addEventListener('click', () => {
+      showForm();
+      document.getElementById('name').value = c.name || '';
+      document.getElementById('location').value = c.location || '';
+      document.getElementById('email').value = c.email || '';
+      document.getElementById('phone').value = c.phone || '';
+      document.getElementById('website').value = c.website || '';
+      document.getElementById('linkedin').value = c.linkedin || '';
+      document.getElementById('other').value = c.other || '';
+      document.getElementById('note').value = c.note || '';
+      document.getElementById('status').value = c.status || 'not applied';
+      // remove item now; re-add on submit (simple edit flow)
+      const i = companies.indexOf(c);
+      if(i >= 0) companies.splice(i,1);
+      populateLocationFilter();
+      renderTable();
+      window.scrollTo({top:0,behavior:'smooth'});
+    });
+    tdActions.appendChild(editBtn);
+    tdActions.appendChild(delBtn);
+
+    tr.appendChild(tdName);
+    tr.appendChild(tdLoc);
+    tr.appendChild(tdContact);
+    tr.appendChild(tdWeb);
+    tr.appendChild(tdStatus);
+    tr.appendChild(tdNote);
+    tr.appendChild(tdActions);
+
+    tableBody.appendChild(tr);
+  });
+}
+
+// --- UI interactions ---
+homeCard.addEventListener('click', showForm);
+cancelFormBtn.addEventListener('click', hideForm);
+function showForm(){ formPanel.style.display='block'; setTimeout(()=> document.getElementById('name').focus(),100); }
+function hideForm(){ formPanel.style.display='none'; companyForm.reset(); }
+
+// add / edit submit
+companyForm.addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const data = {
+    name: document.getElementById('name').value.trim(),
+    location: document.getElementById('location').value.trim(),
+    email: document.getElementById('email').value.trim(),
+    phone: document.getElementById('phone').value.trim(),
+    website: document.getElementById('website').value.trim(),
+    linkedin: document.getElementById('linkedin').value.trim(),
+    other: document.getElementById('other').value.trim(),
+    note: document.getElementById('note').value.trim(),
+    status: document.getElementById('status').value || 'not applied',
+    addedAt: new Date().toISOString()
+  };
+  if(!data.name){ alert('Please enter company name'); return; }
+  companies.unshift(data);
+  await persistCSV();
+  populateLocationFilter();
+  renderTable();
+  companyForm.reset();
+  hideForm();
+});
+
+// upload CSV
+uploadBtn.addEventListener('click', ()=> uploadCsvInput.click());
+uploadCsvInput.addEventListener('change', (ev) => {
+  const f = ev.target.files[0];
+  if(!f) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try{
+      const text = e.target.result;
+      const parsed = parseCSV(text);
+      const mapped = normalizeParsedRows(parsed);
+      if(mapped.length === 0){ alert('No rows found in CSV.'); return; }
+      companies = companies.concat(mapped);
+      populateLocationFilter();
+      renderTable();
+      alert('CSV loaded into the app. To persist to disk choose a CSV to use as storage or click Download CSV.');
+    }catch(err){
+      console.error(err);
+      alert('Failed to parse CSV: ' + err.message);
+    }
+  };
+  reader.readAsText(f);
+  uploadCsvInput.value = '';
+});
+
+// choose CSV to use as storage (File System Access API)
+chooseFileBtn.addEventListener('click', async () => {
+  if(!window.showOpenFilePicker){
+    alert('Your browser does not support the File System Access API. You can still Upload CSV and Download CSV to save changes.');
+    return;
+  }
+  try{
+    const [handle] = await window.showOpenFilePicker({
+      types: [{ description: 'CSV files', accept: {'text/csv': ['.csv']} }],
+      multiple: false,
+    });
+    const file = await handle.getFile();
+    const text = await file.text();
+    const parsed = text.trim() ? parseCSV(text) : [];
+    const mapped = normalizeParsedRows(parsed);
+    fileHandle = handle;
+    // replace current in-memory with file contents (single source of truth)
+    companies = mapped;
+    populateLocationFilter();
+    renderTable();
+    alert('CSV file opened and will be used as persistent storage. Future changes will overwrite that file.');
+  }catch(err){
+    console.error(err);
+    if(err.name !== 'AbortError') alert('Could not open file: ' + (err.message || err));
+  }
+});
+
+// download CSV (manual save)
+downloadCsvBtn.addEventListener('click', async () => {
+  if(companies.length === 0){ alert('No data to export.'); return; }
+  await persistCSV();
+  alert('CSV exported (downloaded or saved).');
+});
+
+// filters logic
+filterAllBtn.addEventListener('click', () => { setActiveFilter('__all'); });
+filterAppliedBtn.addEventListener('click', () => { setActiveFilter('applied'); });
+filterNotBtn.addEventListener('click', () => { setActiveFilter('not applied'); });
+
+function setActiveFilter(val){
+  activeStatusFilter = val;
+  // toggle UI
+  filterAllBtn.classList.toggle('active-filter', val === '__all');
+  filterAppliedBtn.classList.toggle('active-filter', val === 'applied');
+  filterNotBtn.classList.toggle('active-filter', val === 'not applied');
+  renderTable();
+}
+
+// search & location filter events
+searchInput.addEventListener('input', () => { renderTable(); });
+locationFilter.addEventListener('change', () => { renderTable(); });
+
+// initialize
+function init(){
+  // no default file loaded; user can upload or choose CSV
+  renderTable();
+  populateLocationFilter();
+  setActiveFilter('__all');
+}
+init();
+</script>
+</body>
+</html>
